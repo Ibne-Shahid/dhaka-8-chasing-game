@@ -5,6 +5,9 @@ import { Zap, RotateCcw, Play } from 'lucide-react';
 const PLAYER_IMAGE_URL = "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRp9H6pI7lJo4UTGr3SPJ3L8yslgsxOlUm7SQ&s"; 
 const ENEMY_IMAGE_URL = "https://tfe-bd.sgp1.cdn.digitaloceanspaces.com/posts/25699/mirza-abbas.jpg";
 
+const RUNNING_SOUND_URL = "/WhatsApp Audio 2026-02-04 at 9.00.48 PM.mpeg";
+const CAUGHT_SOUND_URL = "/WhatsApp Audio 2026-02-04 at 8.47.12 PM.mpeg";
+
 const PLAYER_SIZE = 50;
 const INITIAL_ENEMY_SPEED = 3.5;
 
@@ -21,19 +24,45 @@ export default function App() {
   const keysRef = useRef({});
   const requestRef = useRef();
   const enemySpeedRef = useRef(INITIAL_ENEMY_SPEED);
+  
+  const runningAudio = useRef(null);
+  const caughtAudio = useRef(null);
 
   useEffect(() => {
+    runningAudio.current = new Audio(RUNNING_SOUND_URL);
+    caughtAudio.current = new Audio(CAUGHT_SOUND_URL);
+    runningAudio.current.loop = true;
+
     const handleResize = () => setDimensions({ width: window.innerWidth, height: window.innerHeight });
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
   useEffect(() => {
+    if (!runningAudio.current || !caughtAudio.current) return;
+
+    if (hasStarted && !isGameOver) {
+      runningAudio.current.play().catch(() => {});
+    } else {
+      runningAudio.current.pause();
+      runningAudio.current.currentTime = 0;
+    }
+
+    if (isGameOver) {
+      caughtAudio.current.currentTime = 0;
+      caughtAudio.current.play().catch((err) => console.error("Playback failed:", err));
+    }
+  }, [hasStarted, isGameOver]);
+
+  useEffect(() => {
     const down = (e) => { keysRef.current[e.key.toLowerCase()] = true; };
     const up = (e) => { keysRef.current[e.key.toLowerCase()] = false; };
     window.addEventListener('keydown', down);
     window.addEventListener('keyup', up);
-    return () => { window.removeEventListener('keydown', down); window.removeEventListener('keyup', up); };
+    return () => { 
+      window.removeEventListener('keydown', down); 
+      window.removeEventListener('keyup', up); 
+    };
   }, []);
 
   const update = () => {
@@ -95,6 +124,10 @@ export default function App() {
     enemySpeedRef.current = INITIAL_ENEMY_SPEED;
     setScore(0);
     setIsGameOver(false);
+    if (caughtAudio.current) {
+      caughtAudio.current.pause();
+      caughtAudio.current.currentTime = 0;
+    }
   };
 
   const startGame = () => {
@@ -103,7 +136,6 @@ export default function App() {
 
   return (
     <div className="fixed inset-0 bg-zinc-950 overflow-hidden touch-none select-none">
-      
       <div className="absolute top-6 left-6 z-30">
         <div className="text-emerald-400 text-4xl font-black italic flex items-center gap-2 drop-shadow-[0_0_10px_rgba(52,211,153,0.5)]">
           <Zap fill="currentColor" size={30} /> {Math.floor(score / 10)}
@@ -153,10 +185,10 @@ export default function App() {
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
           >
-            <div className="bg-zinc-900 border border-white/10 p-12 rounded-[3rem] text-center shadow-2xl">
-              <h2 className="text-5xl font-black text-white mb-6 italic">পাটওয়ারীকে মীর্জা আব্বাসের হাত থেকে বাঁচাও!</h2>
+            <div className="bg-zinc-900 border border-white/10 p-12 rounded-[3rem] text-center shadow-2xl mx-4">
+              <h2 className="text-3xl md:text-5xl font-black text-white mb-6 italic">পাটওয়ারীকে মীর্জা আব্বাসের হাত থেকে বাঁচাও!</h2>
               <button onClick={startGame} className="w-full flex items-center justify-center gap-3 bg-emerald-500 text-black px-12 py-4 rounded-2xl font-black text-xl active:scale-95 transition-transform">
-                <Play size={24} fill="currentColor" /> লাগা দৌড়
+                <Play size={24} fill="currentColor" /> লাগা দৌড়
               </button>
             </div>
           </motion.div>
@@ -167,11 +199,11 @@ export default function App() {
             initial={{ opacity: 0 }} animate={{ opacity: 1 }}
             className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md"
           >
-            <div className="bg-zinc-900 border border-white/10 p-12 rounded-[3rem] text-center shadow-2xl">
-              <h2 className="text-6xl font-black text-white mb-2 italic">পাটওয়ারী কট!</h2>
+            <div className="bg-zinc-900 border border-white/10 p-12 rounded-[3rem] text-center shadow-2xl mx-4">
+              <h2 className="text-6xl font-black text-white mb-2 italic">পাটওয়ারী কট!</h2>
               <p className="text-zinc-400 mb-8 font-medium italic">ভোট সংখ্যা: {Math.floor(score / 10)}</p>
               <button onClick={reset} className="w-full flex items-center justify-center gap-3 bg-emerald-500 text-black py-4 rounded-2xl font-black text-xl active:scale-95">
-                <RotateCcw size={24} /> আবার দৌড়া
+                <RotateCcw size={24} /> আবার দৌড়া
               </button>
             </div>
           </motion.div>
