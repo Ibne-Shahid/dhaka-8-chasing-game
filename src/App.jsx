@@ -9,7 +9,7 @@ const RUNNING_SOUND_URL = "/WhatsApp Audio 2026-02-04 at 9.00.48 PM.mpeg";
 const CAUGHT_SOUND_URL = "/WhatsApp Audio 2026-02-04 at 8.47.12 PM.mpeg";
 
 const PLAYER_SIZE = 50;
-const INITIAL_ENEMY_SPEED = 3.5;
+const INITIAL_ENEMY_SPEED = 1.5;
 
 export default function App() {
   const [hasStarted, setHasStarted] = useState(false);
@@ -105,7 +105,7 @@ export default function App() {
       if (Math.sqrt(dx * dx + dy * dy) < 40) {
         setScore(s => s + (isMegaPoint ? 5 : 1));
         spawnNewPoint(pointCounter);
-        enemySpeedRef.current += 0.25;
+        enemySpeedRef.current += 0.05;
       }
       return { x: nX, y: nY };
     });
@@ -184,7 +184,7 @@ export default function App() {
       </motion.div>
 
       <div className="absolute bottom-10 left-0 right-0 flex justify-center md:hidden">
-        <div className="grid grid-cols-3 gap-2 bg-white/5 p-4 rounded-3xl backdrop-blur-md border border-white/10">
+        <div className="grid grid-cols-3 gap-5 bg-white/5 p-4 rounded-3xl backdrop-blur-md border border-white/10">
           <div /><button className="w-12 h-12 bg-zinc-800 rounded-xl flex items-center justify-center active:bg-emerald-500" onPointerDown={() => (keysRef.current['w'] = true)} onPointerUp={() => (keysRef.current['w'] = false)}>↑</button><div />
           <button className="w-12 h-12 bg-zinc-800 rounded-xl flex items-center justify-center active:bg-emerald-500" onPointerDown={() => (keysRef.current['a'] = true)} onPointerUp={() => (keysRef.current['a'] = false)}>←</button>
           <button className="w-12 h-12 bg-zinc-800 rounded-xl flex items-center justify-center active:bg-emerald-500" onPointerDown={() => (keysRef.current['s'] = true)} onPointerUp={() => (keysRef.current['s'] = false)}>↓</button>
