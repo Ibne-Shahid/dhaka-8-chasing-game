@@ -23,18 +23,29 @@ export default function App() {
   const [highScore, setHighScore] = useState(parseInt(localStorage.getItem('face_hc') || '0'));
   const [dimensions, setDimensions] = useState({ width: window.innerWidth, height: window.innerHeight });
 
+  const posRef = useRef({ x: 50, y: 150 });
+  const enemyPosRef = useRef({ x: 300, y: 300 });
+  const pointPosRef = useRef({ x: 200, y: 200 });
+  const isMegaPointRef = useRef(false);
+  const pointCounterRef = useRef(0);
+  const scoreRef = useRef(0);
+  
   const keysRef = useRef({});
   const requestRef = useRef();
   const enemySpeedRef = useRef(INITIAL_ENEMY_SPEED);
   const runningAudio = useRef(null);
   const caughtAudio = useRef(null);
+  const lastUpdateRef = useRef(0);
 
   useEffect(() => {
     runningAudio.current = new Audio(RUNNING_SOUND_URL);
     caughtAudio.current = new Audio(CAUGHT_SOUND_URL);
     runningAudio.current.loop = true;
 
-    const handleResize = () => setDimensions({ width: window.innerWidth, height: window.innerHeight });
+    const handleResize = () => {
+      setDimensions({ width: window.innerWidth, height: window.innerHeight });
+    };
+    
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
@@ -66,8 +77,14 @@ export default function App() {
   }, [hasStarted, isGameOver]);
 
   useEffect(() => {
-    const down = (e) => { keysRef.current[e.key.toLowerCase()] = true; };
-    const up = (e) => { keysRef.current[e.key.toLowerCase()] = false; };
+    const down = (e) => { 
+      keysRef.current[e.key.toLowerCase()] = true; 
+      e.preventDefault(); // Fix: Prevent page scroll
+    };
+    const up = (e) => { 
+      keysRef.current[e.key.toLowerCase()] = false; 
+      e.preventDefault();
+    };
     window.addEventListener('keydown', down);
     window.addEventListener('keyup', up);
     return () => { 
@@ -79,59 +96,98 @@ export default function App() {
   const spawnNewPoint = (count) => {
     const nextCount = count + 1;
     const isMega = nextCount % 10 === 0 && nextCount !== 0;
+    
+    isMegaPointRef.current = isMega;
+    pointCounterRef.current = nextCount;
+    
     setIsMegaPoint(isMega);
     setPointCounter(nextCount);
     
-    setPointPos({
+    const newPointPos = {
       x: Math.floor(Math.random() * (dimensions.width - 100)) + 50,
       y: Math.floor(Math.random() * (dimensions.height - 200)) + 100
-    });
+    };
+    
+    pointPosRef.current = newPointPos;
+    setPointPos(newPointPos);
   };
 
-  const update = () => {
-    if (isGameOver || !hasStarted) return;
+  const gameLoop = () => {
+    if (isGameOver || !hasStarted) {
+      requestRef.current = requestAnimationFrame(gameLoop);
+      return;
+    }
 
     const speed = dimensions.width < 768 ? 7 : 10;
-
-    setPos(prev => {
-      let nX = prev.x + (keysRef.current['arrowright'] || keysRef.current['d'] ? speed : keysRef.current['arrowleft'] || keysRef.current['a'] ? -speed : 0);
-      let nY = prev.y + (keysRef.current['arrowdown'] || keysRef.current['s'] ? speed : keysRef.current['arrowup'] || keysRef.current['w'] ? -speed : 0);
+    
+    let moved = false;
+    const newPos = { ...posRef.current };
+    
+    if (keysRef.current['arrowright'] || keysRef.current['d']) {
+      newPos.x += speed;
+      moved = true;
+    }
+    if (keysRef.current['arrowleft'] || keysRef.current['a']) {
+      newPos.x -= speed;
+      moved = true;
+    }
+    if (keysRef.current['arrowdown'] || keysRef.current['s']) {
+      newPos.y += speed;
+      moved = true;
+    }
+    if (keysRef.current['arrowup'] || keysRef.current['w']) {
+      newPos.y -= speed;
+      moved = true;
+    }
+    
+    newPos.x = Math.max(0, Math.min(newPos.x, dimensions.width - PLAYER_SIZE));
+    newPos.y = Math.max(0, Math.min(newPos.y, dimensions.height - PLAYER_SIZE));
+    
+    posRef.current = newPos;
+    
+    const dx = newPos.x - pointPosRef.current.x;
+    const dy = newPos.y - pointPosRef.current.y;
+    if (Math.sqrt(dx * dx + dy * dy) < 40) {
+      scoreRef.current += isMegaPointRef.current ? 5 : 1;
+      setScore(scoreRef.current);
       
-      nX = Math.max(0, Math.min(nX, dimensions.width - PLAYER_SIZE));
-      nY = Math.max(0, Math.min(nY, dimensions.height - PLAYER_SIZE));
+      enemySpeedRef.current += 0.05;
+      spawnNewPoint(pointCounterRef.current);
+    }
+    
+    const enemyDx = posRef.current.x - enemyPosRef.current.x;
+    const enemyDy = posRef.current.y - enemyPosRef.current.y;
+    const enemyDist = Math.sqrt(enemyDx * enemyDx + enemyDy * enemyDy);
 
-      const dx = nX - pointPos.x;
-      const dy = nY - pointPos.y;
-      if (Math.sqrt(dx * dx + dy * dy) < 40) {
-        setScore(s => s + (isMegaPoint ? 5 : 1));
-        spawnNewPoint(pointCounter);
-        enemySpeedRef.current += 0.05;
-      }
-      return { x: nX, y: nY };
-    });
-
-    setEnemyPos(prevE => {
-      const dx = pos.x - prevE.x;
-      const dy = pos.y - prevE.y;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-
-      if (dist < 45) {
-        setIsGameOver(true);
-        return prevE;
-      }
-      return {
-        x: prevE.x + (dx / dist) * enemySpeedRef.current,
-        y: prevE.y + (dy / dist) * enemySpeedRef.current
+    if (enemyDist < 45) {
+      setIsGameOver(true);
+    } else {
+      enemyPosRef.current = {
+        x: enemyPosRef.current.x + (enemyDx / enemyDist) * enemySpeedRef.current,
+        y: enemyPosRef.current.y + (enemyDy / enemyDist) * enemySpeedRef.current
       };
-    });
-
-    requestRef.current = requestAnimationFrame(update);
+    }
+    
+    const now = performance.now();
+    if (now - lastUpdateRef.current > 50) {
+      setPos({ ...posRef.current });
+      setEnemyPos({ ...enemyPosRef.current });
+      lastUpdateRef.current = now;
+    }
+    
+    requestRef.current = requestAnimationFrame(gameLoop);
   };
 
   useEffect(() => {
-    if (hasStarted) requestRef.current = requestAnimationFrame(update);
-    return () => cancelAnimationFrame(requestRef.current);
-  }, [pos, isGameOver, hasStarted, pointPos]);
+    if (hasStarted) {
+      requestRef.current = requestAnimationFrame(gameLoop);
+    }
+    return () => {
+      if (requestRef.current) {
+        cancelAnimationFrame(requestRef.current);
+      }
+    };
+  }, [hasStarted, isGameOver]); 
 
   const handleStart = () => {
     stopAllSounds();
@@ -139,18 +195,27 @@ export default function App() {
   };
 
   const handleReset = () => {
-    if (score > highScore) {
-      setHighScore(score);
-      localStorage.setItem('face_hc', score.toString());
+    if (scoreRef.current > highScore) {
+      setHighScore(scoreRef.current);
+      localStorage.setItem('face_hc', scoreRef.current.toString());
     }
+    
     stopAllSounds();
+    
+    posRef.current = { x: 50, y: 150 };
+    enemyPosRef.current = { x: dimensions.width - 100, y: dimensions.height - 150 };
+    enemySpeedRef.current = INITIAL_ENEMY_SPEED;
+    scoreRef.current = 0;
+    pointCounterRef.current = 0;
+    isMegaPointRef.current = false;
+    
     setPos({ x: 50, y: 150 });
     setEnemyPos({ x: dimensions.width - 100, y: dimensions.height - 150 });
-    enemySpeedRef.current = INITIAL_ENEMY_SPEED;
     setScore(0);
     setPointCounter(0);
     setIsMegaPoint(false);
     setIsGameOver(false);
+    
     spawnNewPoint(-1); 
   };
 
@@ -175,20 +240,58 @@ export default function App() {
         )}
       </div>
 
-      <motion.div animate={{ x: pos.x, y: pos.y }} transition={{ type: "spring", stiffness: 600, damping: 30 }} className="absolute z-20">
+      <motion.div 
+        animate={{ x: pos.x, y: pos.y }} 
+        transition={{ type: "spring", stiffness: 600, damping: 30 }} 
+        className="absolute z-20"
+      >
         <img src={PLAYER_IMAGE_URL} alt="P" className="w-12 h-12 rounded-full border-2 border-emerald-400 shadow-[0_0_20px_rgba(52,211,153,0.6)] object-cover" />
       </motion.div>
 
-      <motion.div animate={{ x: enemyPos.x, y: enemyPos.y }} className="absolute z-10">
+      <motion.div 
+        animate={{ x: enemyPos.x, y: enemyPos.y }} 
+        transition={{ type: "spring", stiffness: 600, damping: 30 }}
+        className="absolute z-10"
+      >
         <img src={ENEMY_IMAGE_URL} alt="E" className="w-12 h-12 rounded-full border-2 border-rose-500 shadow-[0_0_25px_rgba(244,63,94,0.7)] object-cover" />
       </motion.div>
 
       <div className="absolute bottom-10 left-0 right-0 flex justify-center md:hidden">
         <div className="grid grid-cols-3 gap-5 bg-white/5 p-4 rounded-3xl backdrop-blur-md border border-white/10">
-          <div /><button className="w-12 h-12 bg-zinc-800 rounded-xl flex items-center justify-center active:bg-emerald-500" onPointerDown={() => (keysRef.current['w'] = true)} onPointerUp={() => (keysRef.current['w'] = false)}>↑</button><div />
-          <button className="w-12 h-12 bg-zinc-800 rounded-xl flex items-center justify-center active:bg-emerald-500" onPointerDown={() => (keysRef.current['a'] = true)} onPointerUp={() => (keysRef.current['a'] = false)}>←</button>
-          <button className="w-12 h-12 bg-zinc-800 rounded-xl flex items-center justify-center active:bg-emerald-500" onPointerDown={() => (keysRef.current['s'] = true)} onPointerUp={() => (keysRef.current['s'] = false)}>↓</button>
-          <button className="w-12 h-12 bg-zinc-800 rounded-xl flex items-center justify-center active:bg-emerald-500" onPointerDown={() => (keysRef.current['d'] = true)} onPointerUp={() => (keysRef.current['d'] = false)}>→</button>
+          <div />
+          <button 
+            className="w-12 h-12 bg-zinc-800 rounded-xl flex items-center justify-center active:bg-emerald-500 touch-none" 
+            onTouchStart={() => { keysRef.current['w'] = true; }}
+            onTouchEnd={() => { keysRef.current['w'] = false; }}
+            onMouseDown={() => { keysRef.current['w'] = true; }}
+            onMouseUp={() => { keysRef.current['w'] = false; }}
+            onMouseLeave={() => { keysRef.current['w'] = false; }}
+          >↑</button>
+          <div />
+          <button 
+            className="w-12 h-12 bg-zinc-800 rounded-xl flex items-center justify-center active:bg-emerald-500 touch-none" 
+            onTouchStart={() => { keysRef.current['a'] = true; }}
+            onTouchEnd={() => { keysRef.current['a'] = false; }}
+            onMouseDown={() => { keysRef.current['a'] = true; }}
+            onMouseUp={() => { keysRef.current['a'] = false; }}
+            onMouseLeave={() => { keysRef.current['a'] = false; }}
+          >←</button>
+          <button 
+            className="w-12 h-12 bg-zinc-800 rounded-xl flex items-center justify-center active:bg-emerald-500 touch-none" 
+            onTouchStart={() => { keysRef.current['s'] = true; }}
+            onTouchEnd={() => { keysRef.current['s'] = false; }}
+            onMouseDown={() => { keysRef.current['s'] = true; }}
+            onMouseUp={() => { keysRef.current['s'] = false; }}
+            onMouseLeave={() => { keysRef.current['s'] = false; }}
+          >↓</button>
+          <button 
+            className="w-12 h-12 bg-zinc-800 rounded-xl flex items-center justify-center active:bg-emerald-500 touch-none" 
+            onTouchStart={() => { keysRef.current['d'] = true; }}
+            onTouchEnd={() => { keysRef.current['d'] = false; }}
+            onMouseDown={() => { keysRef.current['d'] = true; }}
+            onMouseUp={() => { keysRef.current['d'] = false; }}
+            onMouseLeave={() => { keysRef.current['d'] = false; }}
+          >→</button>
         </div>
       </div>
 
